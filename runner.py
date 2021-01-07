@@ -1,3 +1,4 @@
+import os
 import sys
 import psutil
 import logging
@@ -5,7 +6,7 @@ import signal
 from helper import args_parser
 from summary.summary import Summary
 from subprocess import PIPE
-from loggable.loggable import TIMESTAMP
+from loggable.loggable import Loggable, LOGS_DIR, TIMESTAMP
 from metrics.disk_io import DiskIO
 from metrics.memory import Memory
 from metrics.proc_th_cpu import ProcThCpu
@@ -66,6 +67,14 @@ class Runner:
         self.debugger.debug(f'Running command {strace_command}')
         strace = psutil.Popen(strace_command.split(), stdout=PIPE, encoding='ascii')
 
+        # Create pcap file using tcpdump process
+        # Challenge: some traffic might get missed out because of race
+        self.debugger.debug('Creating pcap file')
+        pcap_path = Loggable(self.command, iteration, 'net_trace', self.debugger)._get_log_path('pcap')
+        split_command = f'tcpdump -i any -w {pcap_path}'
+        self.debugger.debug(f'Running command {split_command}')
+        tcpdump = psutil.Popen(split_command.split())
+
         # Wait for command to finish executing and pick up stdout and stderr
         self.debugger.debug('Waiting for child process to terminate in order to retrieve the stream outputs')
         stdout, stderr = process.communicate()
@@ -78,9 +87,10 @@ class Runner:
         return_code = getattr(process, 'returncode')
         self.debugger.debug(f'Command \"{self.command}\" of iteration {iteration} returned with code: {return_code}')
 
-        # Pass Ctrl+C to strace process and get output
-        self.debugger.debug('Passing Ctrl+C to strace')
+        # Pass Ctrl+C to strace and tcpdump processes and get output
+        self.debugger.debug('Passing Ctrl+C to strace and tcpdump')
         strace.send_signal(signal.SIGINT)
+        tcpdump.send_signal(signal.SIGINT)
 
         # Get strace output
         strace_out = strace.communicate()
@@ -101,6 +111,21 @@ class Runner:
                            Stream(stderr, 'stderr', self.command, iteration, self.debugger)]
                 for stream in streams:
                     stream.dump_to_file()
+
+            if not self.net_trace:  # Workaround to above challenge
+                self.debugger.debug('No net-trace, removing the pcap file')
+                try:
+                    os.remove(pcap_path)
+                except FileNotFoundError:
+                    pass
+
+            # Try to remove the directory if pcap file was the only file and it was removed
+            try:
+                os.rmdir(LOGS_DIR)
+            except FileNotFoundError as exc:
+                print(exc)
+            except OSError:
+                pass
 
         return return_code
 
