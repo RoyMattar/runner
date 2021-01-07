@@ -5,6 +5,11 @@ import signal
 from helper import args_parser
 from summary.summary import Summary
 from subprocess import PIPE
+from loggable.loggable import TIMESTAMP
+from metrics.disk_io import DiskIO
+from metrics.memory import Memory
+from metrics.proc_th_cpu import ProcThCpu
+from metrics.network import Network
 
 EXIT_SUCCESS = 0
 
@@ -43,6 +48,16 @@ class Runner:
         self.debugger.debug(f'Forking a child process to run the command \"{self.command}\"')
         process = psutil.Popen(split_command, stdout=PIPE, stderr=PIPE, encoding='ascii')
 
+        # Initialize system metrics objects
+        metrics = [DiskIO(process, self.command, iteration, self.debugger),
+                   Memory(process, self.command, iteration, self.debugger),
+                   ProcThCpu(process, self.command, iteration, self.debugger),
+                   Network(process, self.command, iteration, self.debugger)]
+
+        # Continually perform system measurements
+        for metric in metrics:
+            metric.measure()
+
         # Wait for command to finish executing and pick up stdout and stderr
         self.debugger.debug('Waiting for child process to terminate in order to retrieve the stream outputs')
         stdout, stderr = process.communicate()
@@ -54,6 +69,13 @@ class Runner:
         # Get return code
         return_code = getattr(process, 'returncode')
         self.debugger.debug(f'Command \"{self.command}\" of iteration {iteration} returned with code: {return_code}')
+
+        # If command fails, create log files
+        if return_code != EXIT_SUCCESS:
+
+            if self.sys_trace:
+                for metric in metrics:
+                    metric.dump_to_file()
 
         return return_code
 
@@ -100,6 +122,7 @@ if __name__ == "__main__":
         # Turn debugging on
         debug_logger.setLevel(logging.DEBUG)
 
+    debug_logger.debug(f'Timestamp: {TIMESTAMP}')
     debug_logger.debug(f'Command: {args.command}; Count: {args.count}; Failed count: {args.failed_count};'
                        f' Sys-trace: {args.sys_trace}; Call-trace: {args.call_trace}; Log-trace: {args.log_trace}')
 

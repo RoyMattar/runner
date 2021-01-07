@@ -131,3 +131,5 @@ dmypy.json
 # xml, iml
 *.xml
 *.iml
+
+/logs
