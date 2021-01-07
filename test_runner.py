@@ -35,3 +35,20 @@ def test_should_fail_n_times_out_of_m_and_exit(command: str, count: str, fails: 
     out = str(stdout)
     summary = re.search(rf'Return code: (.*); Frequency: (.*);', out).groups()
     assert summary[1] == fails
+
+
+@pytest.mark.parametrize(
+    "command, expectation",
+    [
+        ('false', 7),
+    ])
+def test_should_dump_log_files(command: str, expectation: int):
+    shutil.rmtree(LOGS_DIR)
+    p = psutil.Popen(['python', 'runner.py', command, '-lt', '-ct', '-st'])
+    p.wait()
+
+    num_of_files = 0
+    for path, subdir, files in os.walk(LOGS_DIR):
+        print(files)
+        num_of_files += len(files)
+    assert num_of_files == expectation
