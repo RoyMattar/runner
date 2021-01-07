@@ -1,3 +1,4 @@
+import logging
 import sys
 
 
@@ -10,10 +11,11 @@ class Summary:
     can be printed and most frequent return code returned.
     """
 
-    def __init__(self):
+    def __init__(self, debug_logger: logging.Logger):
         self.return_codes = []
         self.return_codes_frequencies = {}
         self.return_codes_iterations = {int: []}  # Dict of lists of iterations
+        self.debug_logger = debug_logger
 
     def add_return_code(self, return_code: int):
         """
@@ -27,6 +29,7 @@ class Summary:
         Summarize current state of return codes and print the summary.
         """
         self.__make_analysis()
+        self.debug_logger.debug('Printing summary of return codes')
         print('Summary:')
         for key in self.return_codes_frequencies:
             print(f'Return code: {key};'
@@ -49,6 +52,8 @@ class Summary:
         sys.exit(self.get_most_frequent())
 
     def __make_analysis(self):
+        self.debug_logger.debug('Analyzing frequency of return codes')
+
         for index in range(len(self.return_codes)):
             current_return_code = self.return_codes[index]
             self.__aggregate_frequency(current_return_code)

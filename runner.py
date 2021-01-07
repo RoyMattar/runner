@@ -1,5 +1,6 @@
 import sys
 import psutil
+import logging
 import signal
 from helper import args_parser
 from summary.summary import Summary
@@ -11,12 +12,14 @@ EXIT_SUCCESS = 0
 class Runner:
     def __init__(self,
                  command: str,
+                 debugger: logging.Logger,
                  sys_trace=False,
                  call_trace=False,
                  log_trace=False,
                  net_trace=False):
         """
         :param command: command to run.
+        :param debugger: loggable object for debugging.
         :param sys_trace: if True, system measurements will be performed and dumped to files if command fails.
         :param call_trace: if True, system calls will be monitored and dumped to file if command fails.
         :param log_trace: if True, stdout and stderr of the command will be dumped to files if command fails.
@@ -28,16 +31,20 @@ class Runner:
         self.call_trace = call_trace
         self.log_trace = log_trace
         self.net_trace = net_trace
+        self.debugger = debugger
 
-    def run(self):
+    def run(self, iteration: int):
         """
         Run a given command.
+        :param iteration: iteration number, if running the command multiple time. This is for debugging and logging.
         """
         split_command = self.command.split()
 
+        self.debugger.debug(f'Forking a child process to run the command \"{self.command}\"')
         process = psutil.Popen(split_command, stdout=PIPE, stderr=PIPE, encoding='ascii')
 
         # Wait for command to finish executing and pick up stdout and stderr
+        self.debugger.debug('Waiting for child process to terminate in order to retrieve the stream outputs')
         stdout, stderr = process.communicate()
 
         # Print outputs of the command
@@ -46,6 +53,7 @@ class Runner:
 
         # Get return code
         return_code = getattr(process, 'returncode')
+        self.debugger.debug(f'Command \"{self.command}\" of iteration {iteration} returned with code: {return_code}')
 
         return return_code
 
@@ -64,6 +72,7 @@ def __exit_gracefully(signum, frame):
     signal.signal(signal.SIGINT, original_sigterm)
 
     try:
+        debug_logger.debug('SIGINT caught.')
         summary.summarize_and_exit()
 
     except KeyboardInterrupt:
@@ -71,8 +80,12 @@ def __exit_gracefully(signum, frame):
 
 
 if __name__ == "__main__":
+    # Init debug loggable
+    logging.basicConfig()
+    debug_logger = logging.getLogger(__name__)
+
     # Init the summary object
-    summary = Summary()
+    summary = Summary(debug_logger)
 
     # Redirect signals in order to print summary after Ctrl+C or 'kill'
     original_sigint = signal.getsignal(signal.SIGINT)
@@ -83,11 +96,19 @@ if __name__ == "__main__":
     # Parse command line arguments
     args = args_parser.parse()
 
+    if args.debug:
+        # Turn debugging on
+        debug_logger.setLevel(logging.DEBUG)
+
+    debug_logger.debug(f'Command: {args.command}; Count: {args.count}; Failed count: {args.failed_count};'
+                       f' Sys-trace: {args.sys_trace}; Call-trace: {args.call_trace}; Log-trace: {args.log_trace}')
+
     # Keep track of the failed count
     current_failed_count = 0
 
     # Create the runner
     r = Runner(args.command,
+               debugger=debug_logger,
                sys_trace=args.sys_trace,
                call_trace=args.call_trace,
                log_trace=args.log_trace,
@@ -96,7 +117,9 @@ if __name__ == "__main__":
     # Run session
     try:
         for i in range(args.count):
-            current_return_code = r.run()
+            debug_logger.debug(f'Attempt {i + 1} out of {args.count} to run given command')
+
+            current_return_code = r.run(i)
 
             summary.add_return_code(current_return_code)
 
