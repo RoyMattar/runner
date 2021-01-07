@@ -59,6 +59,13 @@ class Runner:
         for metric in metrics:
             metric.measure()
 
+        # Create strace file using strace process
+        # Challenge: some calls might get missed out because of race
+        self.debugger.debug('Creating strace file')
+        strace_command = f'strace -f -p {process.pid}'
+        self.debugger.debug(f'Running command {strace_command}')
+        strace = psutil.Popen(strace_command.split(), stdout=PIPE, encoding='ascii')
+
         # Wait for command to finish executing and pick up stdout and stderr
         self.debugger.debug('Waiting for child process to terminate in order to retrieve the stream outputs')
         stdout, stderr = process.communicate()
@@ -71,12 +78,23 @@ class Runner:
         return_code = getattr(process, 'returncode')
         self.debugger.debug(f'Command \"{self.command}\" of iteration {iteration} returned with code: {return_code}')
 
+        # Pass Ctrl+C to strace process and get output
+        self.debugger.debug('Passing Ctrl+C to strace')
+        strace.send_signal(signal.SIGINT)
+
+        # Get strace output
+        strace_out = strace.communicate()
+
         # If command fails, create log files
         if return_code != EXIT_SUCCESS:
 
             if self.sys_trace:
                 for metric in metrics:
                     metric.dump_to_file()
+
+            if self.call_trace:
+                strace_stream = Stream(strace_out, 'strace', self.command, iteration, self.debugger)
+                strace_stream.dump_to_file()
 
             if self.log_trace:
                 streams = [Stream(stdout, 'stdout', self.command, iteration, self.debugger),
