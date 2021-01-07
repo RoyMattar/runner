@@ -10,6 +10,7 @@ from metrics.disk_io import DiskIO
 from metrics.memory import Memory
 from metrics.proc_th_cpu import ProcThCpu
 from metrics.network import Network
+from stream.stream import Stream
 
 EXIT_SUCCESS = 0
 
@@ -76,6 +77,12 @@ class Runner:
             if self.sys_trace:
                 for metric in metrics:
                     metric.dump_to_file()
+
+            if self.log_trace:
+                streams = [Stream(stdout, 'stdout', self.command, iteration, self.debugger),
+                           Stream(stderr, 'stderr', self.command, iteration, self.debugger)]
+                for stream in streams:
+                    stream.dump_to_file()
 
         return return_code
 
