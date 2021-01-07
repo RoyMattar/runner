@@ -1,5 +1,6 @@
 import sys
 import psutil
+import signal
 from helper import args_parser
 from summary.summary import Summary
 from subprocess import PIPE
@@ -49,9 +50,35 @@ class Runner:
         return return_code
 
 
+def __exit_gracefully(signum, frame):
+    """
+    Redirected handler for SIGINT signal.
+    This is for printing the summary even if
+    Ctrl+C or 'kill' are passed.
+    :param signum
+    :param frame
+    """
+
+    # Restore the original signal handler in case Ctrl+C or 'kill' are passed again before exiting
+    signal.signal(signal.SIGINT, original_sigint)
+    signal.signal(signal.SIGINT, original_sigterm)
+
+    try:
+        summary.summarize_and_exit()
+
+    except KeyboardInterrupt:
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     # Init the summary object
     summary = Summary()
+
+    # Redirect signals in order to print summary after Ctrl+C or 'kill'
+    original_sigint = signal.getsignal(signal.SIGINT)
+    signal.signal(signal.SIGINT, __exit_gracefully)
+    original_sigterm = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGTERM, __exit_gracefully)
 
     # Parse command line arguments
     args = args_parser.parse()
