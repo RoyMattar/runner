@@ -1,6 +1,7 @@
 import sys
 import psutil
 from helper import args_parser
+from summary.summary import Summary
 from subprocess import PIPE
 
 EXIT_SUCCESS = 0
@@ -49,6 +50,9 @@ class Runner:
 
 
 if __name__ == "__main__":
+    # Init the summary object
+    summary = Summary()
+
     # Parse command line arguments
     args = args_parser.parse()
 
@@ -65,14 +69,17 @@ if __name__ == "__main__":
     # Run session
     try:
         for i in range(args.count):
-
             current_return_code = r.run()
+
+            summary.add_return_code(current_return_code)
 
             if current_return_code != EXIT_SUCCESS:
                 current_failed_count += 1
 
             if current_failed_count == args.failed_count:
                 break
+
+        summary.summarize_and_exit()
 
     except BaseException as e:
         print(e)
