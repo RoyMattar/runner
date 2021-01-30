@@ -2,7 +2,7 @@
 
 ## Description
 
-Runner is a script that wraps any command and outputs a summary of execution.
+Runner is a script that wraps any Linux command and outputs a summary of execution including analysis of system statistics.
 
 Run it with a command and with one or more of following options:
 ```
